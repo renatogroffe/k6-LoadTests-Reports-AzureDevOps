@@ -1,0 +1,66 @@
+# Extensões gratuitas utilizadas
+
+# Replace Tokens - substituição de parâmetros/placeholdes - uso acertando
+# a Url da Web no arquivo JavaScript com os testes:
+# https://marketplace.visualstudio.com/items?itemName=qetza.replacetokens
+
+# Html Viewer - exibição de arquivos HTML, respeitando inclusive formatação - uso
+# com o resultado em HTML gerado pelo k6:
+# https://marketplace.visualstudio.com/items?itemName=JakubRumpca.azure-pipelines-html-report
+
+trigger:
+- main
+
+variables:
+  loadTestsScript: './Tests/tests-votacao-random.js'
+  htmtReportK6: 'loadtests-results.html'
+  simultaneousUsers: 100
+  totalRequests: 5000
+  urlWebApp: 'https://groffevotacao.azurewebsites.net'
+
+  # Agent VM image name
+  vmImageName: 'ubuntu-latest'
+
+stages:
+- stage: Tests
+  displayName: Tests stage
+  jobs:
+  - job: Tests
+    displayName: Tests
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: replacetokens@5
+      inputs:
+        targetFiles: '$(loadTestsScript)'
+        encoding: 'auto'
+        tokenPattern: 'default'
+        writeBOM: true
+        actionOnMissing: 'warn'
+        keepToken: false
+        actionOnNoFiles: 'continue'
+        enableTransforms: false
+        enableRecursion: false
+        useLegacyPattern: false
+        defaultValue: '$(urlWebApp)'
+        enableTelemetry: true
+      displayName: Configurar a string de conexão do SQL Server no script de testes
+    - script: |
+        sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+        echo "deb https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+        sudo apt-get update
+        sudo apt-get install k6
+        k6
+      displayName: Instalar o k6
+    - script: |
+        k6 run $(loadTestsScript) --vus $(simultaneousUsers) --iterations $(totalRequests)
+        echo ' '
+        echo ' '
+        echo '** Arquivos/diretórios após a execução dos testes e a partir da raiz:'
+        ls
+      displayName: Executar os testes de carga com k6
+    - task: PublishHtmlReport@1
+      condition: always()
+      inputs:
+        reportDir: $(htmtReportK6)
+      displayName: Publicar relatório com os resultados dos testes
